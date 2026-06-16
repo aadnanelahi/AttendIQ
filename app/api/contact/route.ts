@@ -37,8 +37,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, message: "Thank you! We'll be in touch within 24 hours." })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error("Contact form error:", msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    console.error("Contact form error:", err instanceof Error ? err.message : String(err))
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 })
   }
 }
