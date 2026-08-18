@@ -1,0 +1,20 @@
+{
+  "name": "attendiq",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TechSight Workforce Management (AttendIQ) - multi-tenant SaaS workforce platform",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --filter @attendiq/shared --filter @attendiq/core --filter @attendiq/db build && pnpm --filter @attendiq/api dev",
+    "db:migrate": "pnpm --filter @attendiq/db db:migrate",
+    "db:generate": "pnpm --filter @attendiq/db db:generate",
+    "db:push": "pnpm --filter @attendiq/db db:push",
+    "db:seed": "pnpm --filter @attendiq/db seed"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "AttendIQ",
+    "slug": "attendiq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AttendIQ uses your location to confirm your attendance punch."
+      }
+    },
+    "android": {
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "AttendIQ uses your location to confirm your attendance punch."
+        }
+      ]
+    ]
+  }
+}
