@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AppError, deviceIngestSchema } from '@attendiq/shared';
-import { prisma } from '../lib/db.js';
+import { prisma, Prisma } from '../lib/db.js';
 import { authDeviceOf } from '../plugins/auth.js';
 import { recalculateEmployeeDay } from '../modules/attendance.js';
+
+const ackSchema = z.object({
+  result: z.enum(['SUCCESS', 'FAILED']).default('SUCCESS'),
+  message: z.string().max(500).optional(),
+});
 
 export function registerDeviceGateway(app: FastifyInstance): void {
   app.post('/device-gateway/transactions', async (req, reply) => {
@@ -70,6 +76,12 @@ export function registerDeviceGateway(app: FastifyInstance): void {
       data: { lastTransactionAt: new Date(), lastSeenAt: new Date() },
     });
 
+    const pendingCommands = await prisma.deviceSyncJob.findMany({
+      where: { tenantId: device.tenantId, deviceId: device.id, status: 'PENDING' },
+      orderBy: { requestedAt: 'asc' },
+      take: 10,
+    });
+
     reply.send({
       data: {
         accepted: txResult.count,
@@ -77,7 +89,41 @@ export function registerDeviceGateway(app: FastifyInstance): void {
         rawEventsWritten: eventResult.count,
         recalculatedDays: recalculated,
       },
+      pendingCommands,
     });
+  });
+
+  // Device pulls pending commands queued by the server (push-over-poll).
+  app.get('/device-gateway/jobs', async (req, reply) => {
+    const deviceCtx = authDeviceOf(req);
+    const q = (req.query ?? {}) as { type?: string; since?: string };
+    const where: Prisma.DeviceSyncJobWhereInput = {
+      tenantId: deviceCtx.tenantId,
+      deviceId: deviceCtx.deviceId,
+      status: 'PENDING',
+    };
+    if (q.type) where.type = q.type as never;
+    if (q.since) where.requestedAt = { gt: new Date(q.since) };
+    const jobs = await prisma.deviceSyncJob.findMany({ where, orderBy: { requestedAt: 'asc' }, take: 50 });
+    reply.send({ data: jobs });
+  });
+
+  // Device acknowledges a command; status transitions to COMPLETED / FAILED.
+  app.post('/device-gateway/jobs/:id/ack', async (req, reply) => {
+    const deviceCtx = authDeviceOf(req);
+    const { id } = req.params as { id: string };
+    const body = ackSchema.parse(req.body ?? {});
+    const job = await prisma.deviceSyncJob.findFirst({ where: { id, tenantId: deviceCtx.tenantId, deviceId: deviceCtx.deviceId } });
+    if (!job) throw AppError.notFound('Job not found');
+    const updated = await prisma.deviceSyncJob.update({
+      where: { id },
+      data: {
+        status: body.result === 'SUCCESS' ? 'COMPLETED' : 'FAILED',
+        acknowledgedAt: new Date(),
+        ...(body.result === 'FAILED' ? { error: body.message ?? 'device reported failure' } : {}),
+      },
+    });
+    reply.send({ data: updated });
   });
 }
 

@@ -90,6 +90,14 @@ enum DeviceSyncStatus {
   FAILED
 }
 
+enum SyncJobType {
+  USER_SYNC
+  TEMPLATE_SYNC
+  CONFIG_SYNC
+  TIME_SYNC
+  QUERY
+}
+
 enum AccessAction {
   GRANT
   DENY
@@ -291,6 +299,19 @@ model User {
   approvals              LeaveApproval[]
   attendanceApprovals    AttendanceApproval[]
   notificationPreferences NotificationPreference[]
+  passwordResetTokens     PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Role {
@@ -546,9 +567,12 @@ model DeviceSyncJob {
   tenantId        String
   deviceId        String
   status          DeviceSyncStatus @default(PENDING)
+  type            SyncJobType      @default(CONFIG_SYNC)
+  payload         Json?
   requestedAt     DateTime         @default(now())
   startedAt       DateTime?
   completedAt     DateTime?
+  acknowledgedAt  DateTime?
   addedCount      Int              @default(0)
   duplicatesCount Int              @default(0)
   error           String?

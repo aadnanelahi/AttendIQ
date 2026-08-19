@@ -15,4 +15,5 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY,
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
+  appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3000',
 };

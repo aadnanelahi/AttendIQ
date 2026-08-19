@@ -20,6 +20,48 @@ const adjustmentSchema = z.object({
   note: z.string().max(2000).optional(),
 });
 
+interface StoredComponent {
+  componentId?: string;
+  id?: string;
+  code?: string;
+  type?: 'EARNING' | 'DEDUCTION' | string;
+  amount: number;
+}
+
+function resolveSalaryComponents(
+  salary: { components?: unknown; structure?: { components: { id: string; code: string; type: string; defaultAmount: number }[] } | null } | null | undefined,
+  componentById: Map<string, { code: string; type: string; isStatutory: boolean }>,
+): SalaryComponentDefinition[] {
+  if (salary && Array.isArray(salary.components)) {
+    const stored = salary.components as StoredComponent[];
+    const resolved: (SalaryComponentDefinition | null)[] = stored.map((c) => {
+      if (c.componentId) {
+        const def = componentById.get(c.componentId);
+        if (!def) return null;
+        return { id: c.componentId, code: def.code, type: def.type === 'DEDUCTION' ? 'DEDUCTION' : 'EARNING', isStatutory: def.isStatutory, amount: c.amount };
+      }
+      return {
+        id: c.id ?? c.code ?? 'COMPONENT',
+        code: c.code ?? 'COMPONENT',
+        type: c.type === 'DEDUCTION' ? 'DEDUCTION' : 'EARNING',
+        amount: c.amount,
+      };
+    });
+    const filtered = resolved.filter((c): c is SalaryComponentDefinition => c !== null);
+    if (filtered.length) return filtered;
+  }
+  return (salary?.structure?.components ?? []).map((c) => ({
+    id: c.id,
+    code: c.code,
+    type: c.type === 'DEDUCTION' ? 'DEDUCTION' : 'EARNING',
+    amount: c.defaultAmount,
+  }));
+}
+
+function toCsv(rows: (string | number)[][]): string {
+  return rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+}
+
 export function registerPayrollRoutes(app: FastifyInstance): void {
   // --- Salary structures ---
   app.get('/payroll/structures', async (req, reply) => {
@@ -134,7 +176,7 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
   });
 
   app.post('/payroll/periods/:id/lock', async (req, reply) => {
-    requirePermission('payroll.approve')(req);
+    requirePermission('payroll.lock')(req);
     const tenantId = requireTenantOfUser(req);
     const id = parseId(req);
     const existing = await prisma.payrollPeriod.findFirst({ where: { id, tenantId } });
@@ -174,7 +216,7 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
   });
 
   app.post('/payroll/runs', async (req, reply) => {
-    requirePermission('payroll.write')(req);
+    requirePermission('payroll.run')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const body = (req.body ?? {}) as { periodId?: string };
@@ -194,6 +236,9 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
     const attendanceDays = await prisma.attendanceDay.findMany({ where: { tenantId, date: { gte: start, lte: end }, status: { in: ['PRESENT', 'LATE', 'ABSENT', 'LEAVE', 'REST_DAY', 'HOLIDAY', 'NO_DATA'] } } });
     const leaveTxns = await prisma.leaveTransaction.findMany({ where: { tenantId, date: { gte: start, lte: end }, type: 'USE' } });
     const paidLeaveTypeIds = new Set((await prisma.leaveType.findMany({ where: { tenantId, isPaid: true } })).map((t) => t.id));
+    const componentById = new Map(
+      (await prisma.salaryComponent.findMany({ where: { tenantId } })).map((c) => [c.id, { code: c.code, type: c.type, isStatutory: c.isStatutory }]),
+    );
 
     const run = await prisma.payrollRun.create({
       data: { tenantId, periodId: period.id, status: 'DRAFT', triggeredBy: user.userId, ruleVersion: 'payroll-engine-v1' },
@@ -212,10 +257,8 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
         const absence = dayRows.filter((d) => d.status === 'ABSENT' || d.status === 'NO_DATA').length;
         const overtimeMinutes = dayRows.reduce((s, d) => s + d.overtimeMinutes, 0);
 
-        const salary = employee.salary[0];
-        const components: SalaryComponentDefinition[] = salary && Array.isArray(salary.components)
-          ? (salary.components as { id: string; code: string; type: 'EARNING' | 'DEDUCTION'; amount: number }[]).map((c) => ({ ...c }))
-          : (salary?.structure?.components ?? []).map((c) => ({ id: c.id, code: c.code, type: c.type === 'DEDUCTION' ? 'DEDUCTION' : 'EARNING', amount: c.defaultAmount }));
+const salary = employee.salary[0];
+    const components = resolveSalaryComponents(salary, componentById);
 
         const overtimeApprovedMinutes = (await prisma.overtime.aggregate({
           where: { tenantId, employeeId: employee.id, date: { gte: start, lte: end }, status: 'APPROVED' },
@@ -245,6 +288,17 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
       }
     }
 
+    const payslips: object[] = [];
+    for (const item of items) {
+      const it = item as { id: string; employeeId: string; gross: number; net: number; totals: unknown };
+      const existing = await prisma.payslip.findFirst({ where: { runId: run.id, employeeId: it.employeeId } });
+      if (existing) continue;
+      const slip = await prisma.payslip.create({
+        data: { tenantId, runId: run.id, periodId: period.id, employeeId: it.employeeId, gross: it.gross, net: it.net, components: it.totals as never },
+      });
+      payslips.push(slip);
+    }
+
     const grossTotal = items.reduce((s, i) => s + (i as { gross: number }).gross, 0);
     const netTotal = items.reduce((s, i) => s + (i as { net: number }).net, 0);
     await prisma.payrollRun.update({
@@ -252,8 +306,8 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
       data: { status: 'DRAFT', completedAt: new Date(), totals: { gross: grossTotal, net: netTotal, count: items.length }, errors: errors.length ? (errors as unknown as object) : undefined },
     });
 
-    await writeAudit(req, { action: 'run', resourceType: 'payroll_run', resourceId: run.id, after: { gross: grossTotal, net: netTotal, count: items.length, errors: errors.length } });
-    reply.code(201).send({ data: { run, items: items.length, errors } });
+    await writeAudit(req, { action: 'run', resourceType: 'payroll_run', resourceId: run.id, after: { gross: grossTotal, net: netTotal, count: items.length, errors: errors.length, payslips: payslips.length } });
+    reply.code(201).send({ data: { run, items: items.length, payslips: payslips.length, errors } });
   });
 
   // --- Run adjustments ---
@@ -288,19 +342,33 @@ export function registerPayrollRoutes(app: FastifyInstance): void {
     reply.send({ data: { items, page: q.page, pageSize: q.pageSize, total } });
   });
 
-  // --- Export stub ---
+  // --- Export (CSV generation) ---
   app.post('/payroll/runs/:id/export', async (req, reply) => {
-    requirePermission('payroll.write')(req);
+    requirePermission('payroll.export')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const id = parseId(req);
     const body = (req.body ?? {}) as { format?: string; country?: string };
-    const run = await prisma.payrollRun.findFirst({ where: { id, tenantId } });
-    if (!run) throw AppError.notFound('Payroll run not found');
-    const row = await prisma.payrollExport.create({
-      data: { tenantId, runId: id, format: body.format ?? 'WPS', country: body.country, generatedBy: user.userId, status: 'GENERATED' },
+    const run = await prisma.payrollRun.findFirst({
+      where: { id, tenantId },
+      include: { period: true, items: { include: { employee: { select: { employeeNumber: true, firstName: true, lastName: true } } } } },
     });
-    await writeAudit(req, { action: 'export', resourceType: 'payroll_export', resourceId: row.id, after: { format: row.format } });
-    reply.code(201).send({ data: row });
+    if (!run) throw AppError.notFound('Payroll run not found');
+    const rows: (string | number)[][] = [
+      ['employeeNumber', 'firstName', 'lastName', 'gross', 'net'],
+      ...run.items.map((item) => [
+        item.employee.employeeNumber,
+        item.employee.firstName,
+        item.employee.lastName,
+        item.gross,
+        item.net,
+      ]),
+    ];
+    const content = toCsv(rows);
+    const row = await prisma.payrollExport.create({
+      data: { tenantId, runId: id, format: body.format ?? 'CSV', country: body.country, generatedBy: user.userId, status: 'GENERATED', storageKey: `csv:${Buffer.from(content).toString('base64')}` },
+    });
+    await writeAudit(req, { action: 'export', resourceType: 'payroll_export', resourceId: row.id, after: { format: row.format, items: run.items.length } });
+    reply.code(201).send({ data: { id: row.id, format: row.format, status: row.status, items: run.items.length, csv: content } });
   });
 }

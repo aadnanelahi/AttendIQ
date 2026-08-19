@@ -19,7 +19,7 @@ const feedbackSchema = z.object({
 
 export function registerAiRoutes(app: FastifyInstance): void {
   app.get('/ai/sessions', async (req, reply) => {
-    requirePermission('ai.use')(req);
+    requirePermission('ai.chat')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const sessions = await prisma.aiSession.findMany({
@@ -31,7 +31,7 @@ export function registerAiRoutes(app: FastifyInstance): void {
   });
 
   app.post('/ai/sessions', async (req, reply) => {
-    requirePermission('ai.use')(req);
+    requirePermission('ai.chat')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const body = (req.body ?? {}) as { title?: string };
@@ -41,7 +41,7 @@ export function registerAiRoutes(app: FastifyInstance): void {
   });
 
   app.get('/ai/sessions/:id/messages', async (req, reply) => {
-    requirePermission('ai.use')(req);
+    requirePermission('ai.chat')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const id = parseId(req);
@@ -53,7 +53,7 @@ export function registerAiRoutes(app: FastifyInstance): void {
 
   // --- Chat (tenant-scoped, stateless rule-based stub) ---
   app.post('/ai/chat', async (req, reply) => {
-    requirePermission('ai.use')(req);
+    requirePermission('ai.chat')(req);
     const tenantId = requireTenantOfUser(req);
     const user = requireUser(req);
     const body = chatSchema.parse(req.body);
@@ -89,7 +89,7 @@ export function registerAiRoutes(app: FastifyInstance): void {
   });
 
   app.post('/ai/feedback', async (req, reply) => {
-    requirePermission('ai.use')(req);
+    requirePermission('ai.chat')(req);
     const tenantId = requireTenantOfUser(req);
     const body = feedbackSchema.parse(req.body);
     const message = await prisma.aiMessage.findFirst({ where: { id: body.messageId, tenantId } });

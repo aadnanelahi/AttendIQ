@@ -1,10 +1,17 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AppError, deviceSchema } from '@attendiq/shared';
 import { prisma } from '../lib/db.js';
 import { generateOpaqueToken, hashPassword } from '../lib/hashing.js';
 import { writeAudit } from '../plugins/audit.js';
 import { requirePermission, requireTenantOfUser } from '../plugins/auth.js';
 import { parseId, parseListQuery, takeSkip } from '../lib/http.js';
+
+const syncJobTypeSchema = z.enum(['USER_SYNC', 'TEMPLATE_SYNC', 'CONFIG_SYNC', 'TIME_SYNC', 'QUERY']);
+const syncJobCreateSchema = z.object({
+  type: syncJobTypeSchema.default('CONFIG_SYNC'),
+  payload: z.unknown().optional(),
+});
 
 export function registerDeviceRoutes(app: FastifyInstance): void {
   app.get('/devices', async (req, reply) => {
@@ -115,5 +122,24 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
     const id = parseId(req);
     const jobs = await prisma.deviceSyncJob.findMany({ where: { deviceId: id, tenantId }, orderBy: { requestedAt: 'desc' }, take: 50 });
     reply.send({ data: jobs });
+  });
+
+  app.post('/devices/:id/sync-jobs', async (req, reply) => {
+    requirePermission('device.write')(req);
+    const tenantId = requireTenantOfUser(req);
+    const id = parseId(req);
+    const existing = await prisma.device.findFirst({ where: { id, tenantId } });
+    if (!existing) throw AppError.notFound('Device not found');
+    const body = syncJobCreateSchema.parse(req.body ?? {});
+    const job = await prisma.deviceSyncJob.create({
+      data: {
+        tenantId,
+        deviceId: id,
+        type: body.type,
+        payload: (body.payload as object | undefined) ?? undefined,
+      },
+    });
+    await writeAudit(req, { action: 'create_sync_job', resourceType: 'device_sync_job', resourceId: job.id, after: { deviceId: existing.deviceId, type: body.type } });
+    reply.code(201).send({ data: job });
   });
 }

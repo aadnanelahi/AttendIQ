@@ -1,10 +1,18 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AppError, changePasswordSchema, loginSchema, refreshSchema } from '@attendiq/shared';
 import { prisma } from '../lib/db.js';
 import { generateTokenHash, hashPassword, verifyPassword } from '../lib/hashing.js';
 import { loadIdentity } from '../plugins/auth.js';
 import { writeAudit } from '../plugins/audit.js';
+import { sendEmail } from '../lib/providers.js';
 import { env } from '../env.js';
+
+const forgotPasswordSchema = z.object({ email: z.string().email() });
+const resetPasswordSchema = z.object({
+  token: z.string().min(1).max(500),
+  newPassword: z.string().min(8).max(128),
+});
 
 interface RefreshToken {
   sessionId: string;
@@ -145,6 +153,49 @@ export function registerAuthRoutes(app: FastifyInstance): void {
     const { id } = req.params as { id: string };
     await prisma.session.updateMany({ where: { id, userId: req.authUser.userId }, data: { revokedAt: new Date() } });
     await writeAudit(req, { action: 'revoke_session', resourceType: 'session', resourceId: id });
+    reply.code(204).send();
+  });
+
+  // --- Password reset (self-service; no user enumeration) ---
+  app.post('/auth/forgot-password', async (req, reply) => {
+    const body = forgotPasswordSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } });
+    if (user) {
+      const { token, hash } = await generateTokenHash();
+      const record = await prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+      });
+      const resetToken = `${record.id}.${token}`;
+      const resetUrl = `${env.appBaseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+      await sendEmail({
+        to: [user.email],
+        subject: 'AttendIQ password reset',
+        body: `Reset your AttendIQ password within the next hour using this link:\n\n${resetUrl}\n\nIf you did not request this, ignore this email.`,
+      });
+      await writeAudit(req, { action: 'forgot_password', resourceType: 'user', resourceId: user.id });
+    } else {
+      await writeAudit(req, { action: 'forgot_password', resourceType: 'user', resourceId: body.email });
+    }
+    reply.send({ data: { ok: true } });
+  });
+
+  app.post('/auth/reset-password', async (req, reply) => {
+    const body = resetPasswordSchema.parse(req.body);
+    const i = body.token.indexOf('.');
+    if (i <= 0) throw AppError.validation('Invalid reset token');
+    const id = body.token.slice(0, i);
+    const secret = body.token.slice(i + 1);
+    const record = await prisma.passwordResetToken.findUnique({ where: { id } });
+    if (!record || record.usedAt || record.expiresAt < new Date()) throw AppError.validation('Invalid or expired reset token');
+    const valid = await verifyPassword(secret, record.tokenHash);
+    if (!valid) throw AppError.validation('Invalid reset token');
+    const passwordHash = await hashPassword(body.newPassword);
+    await prisma.$transaction([
+      prisma.passwordResetToken.update({ where: { id }, data: { usedAt: new Date() } }),
+      prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      prisma.session.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    await writeAudit(req, { action: 'reset_password', resourceType: 'user', resourceId: record.userId });
     reply.code(204).send();
   });
 }
