@@ -6,6 +6,7 @@ import { generateOpaqueToken, hashPassword } from '../lib/hashing.js';
 import { writeAudit } from '../plugins/audit.js';
 import { requirePermission, requireTenantOfUser } from '../plugins/auth.js';
 import { parseId, parseListQuery, takeSkip } from '../lib/http.js';
+import { testDeviceCommunication } from '../modules/device-comm.js';
 
 const syncJobTypeSchema = z.enum(['USER_SYNC', 'TEMPLATE_SYNC', 'CONFIG_SYNC', 'TIME_SYNC', 'QUERY']);
 const syncJobCreateSchema = z.object({
@@ -86,6 +87,29 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
     await prisma.device.delete({ where: { id } });
     await writeAudit(req, { action: 'delete', resourceType: 'device', resourceId: id, before: { deviceId: existing.deviceId } });
     reply.code(204).send();
+  });
+
+  app.post('/devices/:id/test-communication', async (req, reply) => {
+    requirePermission('device.write')(req);
+    const tenantId = requireTenantOfUser(req);
+    const id = parseId(req);
+    const device = await prisma.device.findFirst({ where: { id, tenantId } });
+    if (!device) throw AppError.notFound('Device not found');
+
+    const result = await testDeviceCommunication(device);
+    await prisma.deviceHealth.create({
+      data: { tenantId, deviceId: id, status: result.reachable ? 'ONLINE' : 'OFFLINE', extra: { test: result } as never },
+    });
+    if (result.reachable) {
+      await prisma.device.update({ where: { id }, data: { lastSeenAt: new Date() } });
+    }
+    await writeAudit(req, {
+      action: 'test_communication',
+      resourceType: 'device',
+      resourceId: id,
+      after: { deviceId: device.deviceId, reachable: result.reachable, target: result.target },
+    });
+    reply.send({ data: result });
   });
 
   app.post('/devices/:id/rotate-token', async (req, reply) => {

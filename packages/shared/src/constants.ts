@@ -154,6 +154,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly string[]> = {
     'employee.salary.read',
     'employee.salary.write',
     'user.read',
+    'location.read',
+    'location.write',
     'attendance.read',
     'attendance.write',
     'attendance.correction',

@@ -27,6 +27,14 @@ interface Paged<T> {
   pageSize: number;
 }
 
+interface DeviceTestResult {
+  reachable: boolean;
+  protocol: string;
+  target?: string;
+  latencyMs?: number;
+  message: string;
+}
+
 const EMPTY_FORM = {
   vendor: 'ZKTeco',
   model: '',
@@ -47,6 +55,10 @@ export default function DevicesPage(): React.JSX.Element {
   const [newToken, setNewToken] = useState<string | null>(null);
   const [rotateDeviceId, setRotateDeviceId] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [testDeviceId, setTestDeviceId] = useState('');
+  const [testResult, setTestResult] = useState<DeviceTestResult | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const load = useCallback(() => {
     api<Paged<Device>>('/devices')
@@ -107,6 +119,25 @@ export default function DevicesPage(): React.JSX.Element {
     }
   }
 
+  async function testCommunication(): Promise<void> {
+    if (!testDeviceId) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api<DeviceTestResult>(`/devices/${testDeviceId}/test-communication`, { method: 'POST', body: {} });
+      setTestResult(res);
+      if (res.reachable) load();
+    } catch (err) {
+      setTestResult({
+        reachable: false,
+        protocol: '',
+        message: err instanceof Error ? err.message : t('common.error'),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function removeDevice(id: string): Promise<void> {
     if (!window.confirm('Delete this device?')) return;
     await api(`/devices/${id}`, { method: 'DELETE' })
@@ -119,9 +150,14 @@ export default function DevicesPage(): React.JSX.Element {
       <PageHeader
         title={t('devices.title')}
         action={
-          <button className="btn-primary" onClick={() => setShowForm(true)}>
-            + {t('devices.add')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" onClick={() => setTestOpen(true)}>
+              {t('devices.test')}
+            </button>
+            <button className="btn-primary" onClick={() => setShowForm(true)}>
+              + {t('devices.add')}
+            </button>
+          </div>
         }
       />
       <div className="card overflow-x-auto">
@@ -262,6 +298,65 @@ export default function DevicesPage(): React.JSX.Element {
           <button className="btn-primary" onClick={() => setNewToken(null)}>
             {t('common.save')}
           </button>
+        </div>
+      </Modal>
+    {/* Test communication */}
+      <Modal
+        open={testOpen}
+        title={t('devices.test')}
+        onClose={() => {
+          setTestOpen(false);
+          setTestResult(null);
+          setTestDeviceId('');
+        }}
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">{t('devices.testSelect')}</label>
+            <select
+              className="input"
+              value={testDeviceId}
+              onChange={(e) => {
+                setTestDeviceId(e.target.value);
+                setTestResult(null);
+              }}
+            >
+              <option value="">{t('common.noData')}</option>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.deviceId} — {d.vendor} {d.model} ({d.ipAddress ?? 'no IP'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {testResult ? (
+            <div
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                testResult.reachable ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-700'
+              }`}
+            >
+              <p className="font-medium">
+                {testResult.reachable ? `✓ ${t('devices.reachable')}` : `✗ ${t('devices.unreachable')}`}
+              </p>
+              <p className="mt-1">{testResult.message}</p>
+              {testResult.target ? (
+                <p className="mt-1 text-xs opacity-80" dir="ltr">
+                  {t('common.total')}: {testResult.target}
+                  {testResult.latencyMs != null ? ` · ${t('devices.latency')}: ${testResult.latencyMs}ms` : ''}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button className="btn-ghost" onClick={() => setTestOpen(false)}>
+              {t('common.cancel')}
+            </button>
+            <button className="btn-primary" disabled={testing || !testDeviceId} onClick={() => void testCommunication()}>
+              {testing ? t('common.loading') : t('devices.testButton')}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -16,4 +16,13 @@ export const env = {
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
   appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3000',
+  ttSmartClientId: process.env.TTSMART_CLIENT_ID,
+  ttSmartClientSecret: process.env.TTSMART_CLIENT_SECRET,
+  ttSmartUsername: process.env.TTSMART_USERNAME,
+  ttSmartPassword: process.env.TTSMART_PASSWORD,
+  ttSmartAccessToken: process.env.TTSMART_ACCESS_TOKEN,
+  ttSmartApiBase: process.env.TTSMART_API_BASE,
+  zkConnectorBaseUrl: process.env.ZK_CONNECTOR_BASE_URL,
+  zkConnectorDeviceId: process.env.ZK_CONNECTOR_DEVICE_ID,
+  zkConnectorSyncIntervalMs: Number(process.env.ZK_CONNECTOR_SYNC_INTERVAL_MS ?? 30000),
 };

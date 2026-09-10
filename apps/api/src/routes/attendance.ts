@@ -5,6 +5,7 @@ import { writeAudit } from '../plugins/audit.js';
 import { requirePermission, requireTenantOfUser, requireUser } from '../plugins/auth.js';
 import { parseId, parseListQuery, takeSkip } from '../lib/http.js';
 import { recalculateEmployeeDay } from '../modules/attendance.js';
+import { evaluateGeofence } from '../modules/geofence.js';
 
 export function registerAttendanceRoutes(app: FastifyInstance): void {
   app.get('/attendance', async (req, reply) => {
@@ -74,6 +75,14 @@ export function registerAttendanceRoutes(app: FastifyInstance): void {
     const employee = await prisma.employee.findFirst({ where: { id: body.employeeId, tenantId } });
     if (!employee) throw AppError.notFound('Employee not found');
 
+    let geofence: Awaited<ReturnType<typeof evaluateGeofence>> | null = null;
+    if (body.location) {
+      geofence = await evaluateGeofence(tenantId, body.employeeId, body.location);
+      if (geofence.enabled && !geofence.matched) {
+        throw AppError.validation(`Punch rejected: location outside permitted work area${geofence.locationName ? ` (${geofence.locationName})` : ''}`);
+      }
+    }
+
     const ts = new Date(body.timestamp);
     const transaction = await prisma.attendanceTransaction.create({
       data: {
@@ -84,7 +93,10 @@ export function registerAttendanceRoutes(app: FastifyInstance): void {
         deviceUserId: employee.deviceUserId ?? body.employeeId,
         timestamp: ts,
         punchType: body.type,
-        payload: { reason: body.reason },
+        payload: {
+          ...(body.reason ? { reason: body.reason } : {}),
+          ...(body.location ? { location: body.location, geofence } : {}),
+        } as never,
         status: 'PROCESSED',
       },
     });

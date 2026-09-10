@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }): React
   return (
     <html lang={locale} dir={dir}>
       <body className="font-sans">
-        <LocaleProvider>{children}</LocaleProvider>
+        <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
       </body>
     </html>
   );

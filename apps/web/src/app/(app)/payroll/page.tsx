@@ -42,8 +42,8 @@ export default function PayrollPage(): React.JSX.Element {
     api<Paged<PayrollPeriod>>('/payroll/periods')
       .then((r) => setPeriods(r.items))
       .catch(() => {});
-    api<Paged<PayrollRun>>('/payroll/runs')
-      .then((r) => setRuns(r.items))
+    api<PayrollRun[] | Paged<PayrollRun>>('/payroll/runs')
+      .then((r) => setRuns(Array.isArray(r) ? r : r.items))
       .catch(() => {});
   }, []);
 

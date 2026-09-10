@@ -21,9 +21,14 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function LocaleProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
-  const [dict, setDict] = useState<Dictionary>(getDictionary(defaultLocale));
+interface LocaleProviderProps {
+  children: ReactNode;
+  initialLocale?: Locale;
+}
+
+export function LocaleProvider({ children, initialLocale = defaultLocale }: LocaleProviderProps): React.JSX.Element {
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
+  const [dict, setDict] = useState<Dictionary>(getDictionary(initialLocale));
 
   useEffect(() => {
     const saved = readCookie(LOCALE_COOKIE);

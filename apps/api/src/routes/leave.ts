@@ -89,8 +89,14 @@ export function registerLeaveRoutes(app: FastifyInstance): void {
   app.get('/leave/requests', async (req, reply) => {
     requirePermission('leave.read')(req);
     const tenantId = requireTenantOfUser(req);
+    const user = requireUser(req);
     const q = parseListQuery(req.query);
+    const mine = (req.query as { mine?: string }).mine === 'true';
     const where: Prisma.LeaveRequestWhereInput = { tenantId };
+    if (mine) {
+      const employee = await prisma.employee.findFirst({ where: { tenantId, userId: user.userId } });
+      if (employee) where.employeeId = employee.id;
+    }
     if (q.from || q.to) {
       where.from = {};
       where.to = {};

@@ -141,11 +141,18 @@ export const deviceIngestSchema = z.object({
 });
 
 // --- Attendance ---
+export const punchLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracyMeters: z.number().min(0).max(10000).optional(),
+  provider: z.enum(['gps']).default('gps'),
+});
 export const manualPunchSchema = z.object({
   employeeId: z.string().min(1),
   timestamp: z.string().datetime({ offset: true }),
   type: z.enum(['CHECK_IN', 'CHECK_OUT']),
   reason: z.string().max(500).optional(),
+  location: punchLocationSchema.optional(),
 });
 export const attendanceAdjustmentSchema = z.object({
   attendanceDayId: z.string().min(1),

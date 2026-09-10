@@ -32,7 +32,7 @@ export function HomeScreen({ onLogout }: HomeProps): React.JSX.Element {
   const [me, setMe] = useState<Me | null>(null);
   const [days, setDays] = useState<AttendanceDay[]>([]);
   const [busy, setBusy] = useState(false);
-  const [loc, setLoc] = useState<string | null>(null);
+  const [loc, setLoc] = useState<{ latitude: number; longitude: number; accuracyMeters?: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -55,7 +55,11 @@ export function HomeScreen({ onLogout }: HomeProps): React.JSX.Element {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const pos = await Location.getCurrentPositionAsync({});
-      setLoc(`${pos.coords.latitude.toFixed(5)},${pos.coords.longitude.toFixed(5)}`);
+      setLoc({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracyMeters: pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : undefined,
+      });
     } catch {
       setLoc(null);
     }
@@ -74,7 +78,8 @@ export function HomeScreen({ onLogout }: HomeProps): React.JSX.Element {
           employeeId: me.employee.id,
           timestamp: new Date().toISOString(),
           type,
-          reason: loc ? `mobile punch from ${loc}` : 'mobile punch',
+          reason: loc ? `mobile punch (${loc.latitude.toFixed(5)},${loc.longitude.toFixed(5)})` : 'mobile punch',
+          ...(loc ? { location: { ...loc, provider: 'gps' } } : {}),
         },
       });
       await load();
@@ -100,7 +105,9 @@ export function HomeScreen({ onLogout }: HomeProps): React.JSX.Element {
 
       <View style={styles.punchCard}>
         <Text style={styles.cardTitle}>Attendance</Text>
-        <Text style={styles.locText}>{loc ? `GPS: ${loc}` : 'Location not captured'}</Text>
+        <Text style={styles.locText}>
+          {loc ? `GPS: ${loc.latitude.toFixed(5)},${loc.longitude.toFixed(5)}${loc.accuracyMeters != null ? ` (±${loc.accuracyMeters}m)` : ''}` : 'Location not captured'}
+        </Text>
         <View style={styles.row}>
           <Pressable style={[styles.button, styles.in]} onPress={() => void punch('CHECK_IN')} disabled={busy}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Check in</Text>}

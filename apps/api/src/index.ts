@@ -21,11 +21,13 @@ import { registerLeaveRoutes } from './routes/leave.js';
 import { registerOvertimeRoutes } from './routes/overtime.js';
 import { registerPayrollRoutes } from './routes/payroll.js';
 import { registerAccessRoutes } from './routes/access.js';
+import { registerAccessTtlockRoutes } from './routes/access-ttlock.js';
 import { registerVisitorRoutes } from './routes/visitors.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerAiRoutes } from './routes/ai.js';
+import { startZkConnectorSync, stopZkConnectorSync } from './modules/connector-sync.js';
 
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL ?? 'info' },
@@ -99,6 +101,7 @@ async function main(): Promise<void> {
       registerOvertimeRoutes(api);
       registerPayrollRoutes(api);
       registerAccessRoutes(api);
+      registerAccessTtlockRoutes(api);
       registerVisitorRoutes(api);
       registerNotificationRoutes(api);
       registerReportRoutes(api);
@@ -107,6 +110,8 @@ async function main(): Promise<void> {
     },
     { prefix: '/api/v1' },
   );
+
+  startZkConnectorSync();
 
   const port = env.port;
   await app.listen({ port, host: process.env.HOST ?? '0.0.0.0' });
@@ -120,6 +125,7 @@ main().catch((err) => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    stopZkConnectorSync();
     await app.close();
     process.exit(0);
   });

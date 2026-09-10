@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-client';
 import { PageHeader } from '@/components/PageHeader';
 
-type SubTab = 'devices' | 'doors' | 'groups';
+type SubTab = 'devices' | 'doors' | 'groups' | 'ttlock';
 
 interface AccessDevice {
   id: string;
@@ -35,6 +35,39 @@ interface Paged<T> {
   pageSize: number;
 }
 
+interface TtlockConfig {
+  configured: boolean;
+  apiBase: string;
+  missing: string[];
+}
+
+interface TtlockLock {
+  lockId: number;
+  lockName: string;
+  lockAlias?: string;
+  modelNum?: string;
+}
+
+interface TtlockUnlockRecord {
+  lockId: number;
+  recordType: number;
+  recordTypeName: string;
+  success: boolean;
+  username?: string;
+  keyboardPwd?: string;
+  lockDate: string;
+  serverDate: string;
+}
+
+interface TtlockResult {
+  configured: boolean;
+  apiBase: string;
+  missing: string[];
+  locks?: TtlockLock[];
+  records?: TtlockUnlockRecord[];
+  error?: string;
+}
+
 export default function AccessPage(): React.JSX.Element {
   const { t } = useI18n();
   const [tab, setTab] = useState<SubTab>('devices');
@@ -48,6 +81,14 @@ export default function AccessPage(): React.JSX.Element {
   const [doorForm, setDoorForm] = useState({ name: '', code: '' });
   const [groupForm, setGroupForm] = useState({ name: '', doorIds: [] as string[] });
   const [busy, setBusy] = useState(false);
+
+  // TTLock test
+  const [ttConfig, setTtConfig] = useState<TtlockConfig | null>(null);
+  const [ttLocks, setTtLocks] = useState<TtlockLock[]>([]);
+  const [ttLockId, setTtLockId] = useState('');
+  const [ttRecords, setTtRecords] = useState<TtlockUnlockRecord[]>([]);
+  const [ttError, setTtError] = useState<string | null>(null);
+  const [ttBusy, setTtBusy] = useState(false);
 
   const loadAll = useCallback(() => {
     api<AccessDevice[]>('/access/devices')
@@ -64,6 +105,52 @@ export default function AccessPage(): React.JSX.Element {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  const loadTtlock = useCallback(() => {
+    api<TtlockConfig>('/access/ttlock/config')
+      .then((c) => {
+        setTtConfig(c);
+        setTtError(null);
+        if (c.configured) {
+          api<TtlockResult>('/access/ttlock/locks')
+            .then((r) => {
+              setTtLocks(r.locks ?? []);
+              if (r.error) setTtError(r.error);
+              setTtLockId((prev) => (prev && r.locks?.some((l) => String(l.lockId) === prev) ? prev : String(r.locks?.[0]?.lockId ?? '')));
+            })
+            .catch((err) => setTtError(err instanceof Error ? err.message : String(err)));
+        }
+      })
+      .catch((err) => setTtError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'ttlock') {
+      loadTtlock();
+    }
+  }, [tab, loadTtlock]);
+
+  async function pullTtlockRecords(): Promise<void> {
+    if (!ttLockId) return;
+    setTtBusy(true);
+    setTtError(null);
+    setTtRecords([]);
+    try {
+      const r = await api<TtlockResult>('/access/ttlock/records', {
+        method: 'POST',
+        body: { lockId: Number(ttLockId), pageSize: 30 },
+      });
+      if (r.error) {
+        setTtError(r.error);
+      } else {
+        setTtRecords(r.records ?? []);
+      }
+    } catch (err) {
+      setTtError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTtBusy(false);
+    }
+  }
 
   async function addDevice(): Promise<void> {
     setBusy(true);
@@ -132,6 +219,7 @@ export default function AccessPage(): React.JSX.Element {
     { key: 'devices', label: t('access.devices') },
     { key: 'doors', label: t('access.doors') },
     { key: 'groups', label: t('access.groups') },
+    { key: 'ttlock', label: t('access.ttlock') },
   ];
 
   return (
@@ -297,6 +385,84 @@ export default function AccessPage(): React.JSX.Element {
               ) : null}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {/* --- TTLock test --- */}
+      {tab === 'ttlock' ? (
+        <div className="card space-y-4">
+          {ttConfig && !ttConfig.configured ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <p className="font-medium">TTLock</p>
+              <p className="mt-1">{t('access.ttlockNotConfigured')}</p>
+              {ttConfig.missing.length > 0 ? (
+                <p className="mt-2 font-mono text-xs" dir="ltr">
+                  {ttConfig.missing.join(', ')}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{t('access.ttlockSelectLock')}</label>
+                <select className="input" value={ttLockId} onChange={(e) => setTtLockId(e.target.value)} disabled={ttLocks.length === 0}>
+                  {ttLocks.map((l) => (
+                    <option key={l.lockId} value={String(l.lockId)}>
+                      {l.lockName} (ID {l.lockId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button className="btn-primary" disabled={ttBusy || !ttLockId || ttLocks.length === 0} onClick={() => void pullTtlockRecords()}>
+                  {ttBusy ? t('common.loading') : t('access.ttlockPull')}
+                </button>
+              </div>
+            </div>
+          )}
+          {ttLocks.length === 0 && ttConfig?.configured && !ttError ? (
+            <p className="text-sm text-slate-400">{t('access.ttlockNoLocks')}</p>
+          ) : null}
+          {ttError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" dir="ltr">
+              {ttError}
+            </div>
+          ) : null}
+          {ttRecords.length > 0 ? (
+            <div>
+              <h3 className="mb-2 text-sm font-medium text-slate-700">{t('access.ttlockRecords')}</h3>
+              <div className="overflow-x-auto">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>{t('access.ttlockTime')}</th>
+                      <th>{t('access.ttlockType')}</th>
+                      <th>{t('access.ttlockUser')}</th>
+                      <th>{t('access.ttlockKey')}</th>
+                      <th>{t('access.ttlockStatus')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ttRecords.map((record, i) => (
+                      <tr key={`${record.lockDate}-${i}`}>
+                        <td className="text-slate-500" dir="ltr">
+                          {new Date(record.lockDate).toLocaleString()}
+                        </td>
+                        <td className="text-slate-900">{record.recordTypeName}</td>
+                        <td className="text-slate-500">{record.username ?? '—'}</td>
+                        <td className="font-mono text-xs text-slate-500">{record.keyboardPwd ?? '—'}</td>
+                        <td>
+                          <span className={record.success ? 'text-emerald-600' : 'text-red-600'}>
+                            {record.success ? `✓ ${t('access.ttlockSuccess')}` : `✗ ${t('access.ttlockRejected')}`}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
