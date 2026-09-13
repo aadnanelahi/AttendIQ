@@ -1,0 +1,5 @@
+{
+  "variables": {
+    "PNPM_FLAGS": "--allow-builds=@prisma/client,@prisma/engines,argon2,esbuild,prisma"
+  }
+}

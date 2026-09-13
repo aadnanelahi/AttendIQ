@@ -1,0 +1,21 @@
+{
+  "buildCommand": "pnpm --filter @attendiq/web build",
+  "installCommand": "pnpm install --filter @attendiq/web --frozen-lockfile --prefer-offline && pnpm approve-builds --filter @attendiq/web",
+  "outputDirectory": "apps/web/.next",
+  "devCommand": "pnpm --filter @attendiq/web dev",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "env": {
+    "NEXT_PUBLIC_API_URL": ""
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {"key": "X-Content-Type-Options", "value": "nosniff"},
+        {"key": "X-Frame-Options", "value": "DENY"},
+        {"key": "X-XSS-Protection", "value": "1; mode=block"}
+      ]
+    }
+  ]
+}
