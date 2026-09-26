@@ -1,0 +1,6 @@
+{
+  "framework": "fastify",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @attendiq/api... build && sh ./scripts/vercel-db-setup.sh",
+  "regions": ["iad1"]
+}

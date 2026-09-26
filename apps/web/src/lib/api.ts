@@ -1,4 +1,6 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+// Default to same-origin '/api/v1'; next.config.mjs proxies it to the API server
+// (API_ORIGIN). Set NEXT_PUBLIC_API_URL only to call an API directly.
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const TOKEN_COOKIE = 'attendiq_token';
 const REFRESH_COOKIE = 'attendiq_refresh';
