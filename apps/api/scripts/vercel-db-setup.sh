@@ -1,6 +1,7 @@
 #!/bin/sh
 # Runs during the Vercel build: syncs the database schema and loads the demo data.
-# Uses the direct (unpooled) connection for schema changes when one is provided.
+# Uses the direct (unpooled) connection for schema changes when one is provided
+# (Neon on Vercel sets DATABASE_URL_UNPOOLED).
 set -e
 if [ -z "$DATABASE_URL" ]; then
   echo "DATABASE_URL is not set - connect a Postgres database to this Vercel project." >&2
