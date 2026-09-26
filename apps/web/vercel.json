@@ -1,12 +1,13 @@
-{
+﻿{
   "buildCommand": "pnpm --filter @attendiq/web build",
-  "installCommand": "pnpm install --filter @attendiq/web --frozen-lockfile --prefer-offline && pnpm approve-builds --filter @attendiq/web",
+  "installCommand": "pnpm install --filter @attendiq/web --frozen-lockfile --prefer-offline",
   "outputDirectory": "apps/web/.next",
   "devCommand": "pnpm --filter @attendiq/web dev",
   "framework": "nextjs",
   "regions": ["iad1"],
   "env": {
-    "NEXT_PUBLIC_API_URL": ""
+    "NEXT_PUBLIC_API_URL": "",
+    "PNPM_FLAGS": "--allow-builds=@prisma/client,@prisma/engines,argon2,esbuild,prisma"
   },
   "headers": [
     {
