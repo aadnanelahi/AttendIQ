@@ -11,3 +11,5 @@ DIRECT_URL="${DATABASE_URL_UNPOOLED:-${POSTGRES_URL_NON_POOLING:-$DATABASE_URL}}
 cd ../../packages/db
 DATABASE_URL="$DIRECT_URL" pnpm exec prisma db push --skip-generate
 DATABASE_URL="$DIRECT_URL" pnpm run seed
+
+# Schema sync uses `prisma db push`; the seed is idempotent (safe on every deploy).
