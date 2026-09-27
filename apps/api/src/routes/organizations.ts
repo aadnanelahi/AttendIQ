@@ -31,6 +31,8 @@ export function registerOrgRoutes(app: FastifyInstance): void {
     permissionRead: 'branch.read',
     searchFields: ['name', 'code'],
     include: { locations: true, departments: true },
+    orderBy: { name: 'asc' },
+    tenantRefs: { legalEntityId: prisma.legalEntity },
   });
 
   registerCrud(app, '/departments', {
@@ -40,6 +42,10 @@ export function registerOrgRoutes(app: FastifyInstance): void {
     permissionWrite: 'department.write',
     permissionRead: 'department.read',
     searchFields: ['name', 'code'],
+    include: { branch: true },
+    // Department has no updatedAt column, so the default sort would fail.
+    orderBy: { name: 'asc' },
+    tenantRefs: { branchId: prisma.branch },
   });
 
   registerCrud(app, '/locations', {
@@ -49,5 +55,8 @@ export function registerOrgRoutes(app: FastifyInstance): void {
     permissionWrite: 'location.write',
     permissionRead: 'location.read',
     searchFields: ['name'],
+    include: { branch: true },
+    orderBy: { name: 'asc' },
+    tenantRefs: { branchId: prisma.branch },
   });
 }

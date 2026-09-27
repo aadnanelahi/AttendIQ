@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AppError, createUserSchema, employeeSalarySchema, employeeSchema } from '@attendiq/shared';
 import { prisma, Prisma } from '../lib/db.js';
 import { hashPassword } from '../lib/hashing.js';
@@ -16,6 +17,32 @@ const EMPLOYEE_INCLUDE = {
 
 function isoDateToDate(value?: string): Date | undefined {
   return value ? new Date(`${value}T00:00:00.000Z`) : undefined;
+}
+
+// On update, these links may be sent as null to clear them.
+const employeeUpdateSchema = employeeSchema.partial().extend({
+  departmentId: z.string().min(1).nullable().optional(),
+  branchId: z.string().min(1).nullable().optional(),
+  locationId: z.string().min(1).nullable().optional(),
+  managerId: z.string().min(1).nullable().optional(),
+});
+
+/** Ensures linked branch / department / location / manager belong to the same tenant. */
+async function assertEmployeeRefs(
+  tenantId: string,
+  refs: { branchId?: string | null; departmentId?: string | null; locationId?: string | null; managerId?: string | null },
+): Promise<void> {
+  const checks: [keyof typeof refs, string | null | undefined, () => Promise<{ tenantId: string } | null>][] = [
+    ['branchId', refs.branchId, () => prisma.branch.findUnique({ where: { id: refs.branchId! }, select: { tenantId: true } })],
+    ['departmentId', refs.departmentId, () => prisma.department.findUnique({ where: { id: refs.departmentId! }, select: { tenantId: true } })],
+    ['locationId', refs.locationId, () => prisma.location.findUnique({ where: { id: refs.locationId! }, select: { tenantId: true } })],
+    ['managerId', refs.managerId, () => prisma.employee.findUnique({ where: { id: refs.managerId! }, select: { tenantId: true } })],
+  ];
+  for (const [field, value, load] of checks) {
+    if (!value) continue;
+    const row = await load();
+    if (!row || row.tenantId !== tenantId) throw AppError.validation(`Invalid ${field}`, { [field]: 'Not found' });
+  }
 }
 
 export function registerEmployeeRoutes(app: FastifyInstance): void {
@@ -56,6 +83,7 @@ export function registerEmployeeRoutes(app: FastifyInstance): void {
     requirePermission('employee.write')(req);
     const tenantId = requireTenantOfUser(req);
     const body = employeeSchema.parse(req.body);
+    await assertEmployeeRefs(tenantId, body);
     const { joiningDate, leavingDate, birthDate, ...rest } = body;
     const data = {
       tenantId,
@@ -75,7 +103,8 @@ export function registerEmployeeRoutes(app: FastifyInstance): void {
     const id = parseId(req);
     const existing = await prisma.employee.findFirst({ where: { id, tenantId } });
     if (!existing) throw AppError.notFound('Employee not found');
-    const body = employeeSchema.partial().parse(req.body);
+    const body = employeeUpdateSchema.parse(req.body);
+    await assertEmployeeRefs(tenantId, body);
     const { joiningDate, leavingDate, birthDate, ...rest } = body;
     const data = {
       ...rest,

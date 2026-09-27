@@ -35,6 +35,25 @@ export interface CrudConfig {
   beforeCreate?: (data: Record<string, unknown>) => Record<string, unknown>;
   /** Runs after parsing and tenantId stripping, before update. */
   beforeUpdate?: (data: Record<string, unknown>) => Record<string, unknown>;
+  /** Foreign-key fields that must point at a row of the same tenant, e.g. { branchId: prisma.branch }. */
+  tenantRefs?: Record<string, CrudDelegate>;
+}
+
+/** Rejects ids in `data` that reference another tenant's rows (or rows that don't exist). */
+async function assertTenantRefs(
+  tenantId: string,
+  data: Record<string, unknown>,
+  refs: Record<string, CrudDelegate> | undefined,
+): Promise<void> {
+  if (!refs) return;
+  for (const [field, delegate] of Object.entries(refs)) {
+    const value = data[field];
+    if (typeof value !== 'string' || value === '') continue;
+    const row = await delegate.findUnique({ where: { id: value } });
+    if (!row || row.tenantId !== tenantId) {
+      throw AppError.validation(`Invalid ${field}`, { [field]: 'Not found' });
+    }
+  }
 }
 
 export function registerCrud(app: FastifyInstance, prefix: string, cfg: CrudConfig): void {
@@ -74,6 +93,7 @@ export function registerCrud(app: FastifyInstance, prefix: string, cfg: CrudConf
     requirePermission(writePerm)(req);
     const tenantId = requireTenantOfUser(req);
     const body = cfg.createSchema.parse(req.body);
+    await assertTenantRefs(tenantId, body as Record<string, unknown>, cfg.tenantRefs);
     const data = cfg.beforeCreate ? cfg.beforeCreate({ ...body, tenantId }) : { ...body, tenantId };
     const row = await cfg.delegate.create({ data: data as never });
     await writeAudit(req, { action: 'create', resourceType: cfg.resource, resourceId: String(row.id), after: row });
@@ -90,6 +110,7 @@ export function registerCrud(app: FastifyInstance, prefix: string, cfg: CrudConf
     const body = (schema as z.ZodObject<z.ZodRawShape>).partial().parse(req.body);
     const { tenantId: _ignored, ...updates } = body as Record<string, unknown>;
     void _ignored;
+    await assertTenantRefs(tenantId, updates, cfg.tenantRefs);
     const data = cfg.beforeUpdate ? cfg.beforeUpdate(updates) : updates;
     const row = await cfg.delegate.update({ where: { id }, data: data as never });
     await writeAudit(req, { action: 'update', resourceType: cfg.resource, resourceId: id, before: existing, after: row });
