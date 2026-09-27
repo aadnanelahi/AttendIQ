@@ -32,7 +32,7 @@ export function registerDeviceGateway(app: FastifyInstance): void {
       tenantId: device.tenantId,
       deviceId: device.id,
       dedupeKey: `evt:${device.deviceId}:${t.userId}:${t.timestamp}`,
-      raw: t.raw ?? { userId: t.userId, timestamp: t.timestamp, type: t.type },
+      raw: (t.raw ?? { userId: t.userId, timestamp: t.timestamp, type: t.type }) as Prisma.InputJsonValue,
       status: 'PROCESSED' as const,
     }));
     const eventResult = await prisma.deviceEvent.createMany({ data: events, skipDuplicates: true });
@@ -48,7 +48,7 @@ export function registerDeviceGateway(app: FastifyInstance): void {
         deviceUserId: t.userId,
         timestamp: new Date(t.timestamp),
         punchType: t.type,
-        payload: t.raw as object | undefined,
+        payload: t.raw as Prisma.InputJsonValue | undefined,
         status: 'PROCESSED' as const,
       }));
     const txResult = await prisma.attendanceTransaction.createMany({ data: txData, skipDuplicates: true });
