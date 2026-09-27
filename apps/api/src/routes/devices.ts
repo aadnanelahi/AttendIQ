@@ -14,6 +14,31 @@ const syncJobCreateSchema = z.object({
   payload: z.unknown().optional(),
 });
 
+
+/** ADMS devices are identified only by serial number, so it must be set and globally unique. */
+async function assertPushSerial(protocol: string | undefined, serialNumber: string | undefined, excludeId?: string): Promise<void> {
+  if (protocol !== 'http-push') return;
+  const serial = serialNumber?.trim();
+  if (!serial) throw AppError.validation('Serial number is required for ADMS (http-push) devices', { serialNumber: 'Required' });
+  const clash = await prisma.device.findFirst({
+    where: { serialNumber: { equals: serial, mode: 'insensitive' }, protocol: 'http-push', ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { id: true },
+  });
+  if (clash) throw AppError.conflict('A device with this serial number is already registered');
+}
+
+
+async function assertDeviceRefs(tenantId: string, branchId?: string | null, locationId?: string | null): Promise<void> {
+  if (branchId) {
+    const b = await prisma.branch.findFirst({ where: { id: branchId, tenantId }, select: { id: true } });
+    if (!b) throw AppError.validation('Invalid branchId', { branchId: 'Not found' });
+  }
+  if (locationId) {
+    const l = await prisma.location.findFirst({ where: { id: locationId, tenantId }, select: { id: true } });
+    if (!l) throw AppError.validation('Invalid locationId', { locationId: 'Not found' });
+  }
+}
+
 export function registerDeviceRoutes(app: FastifyInstance): void {
   app.get('/devices', async (req, reply) => {
     requirePermission('device.read')(req);
@@ -51,6 +76,9 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
 
     const existing = await prisma.device.findFirst({ where: { tenantId, deviceId: body.deviceId } });
     if (existing) throw AppError.conflict(`Device ${body.deviceId} already registered`);
+    await assertPushSerial(body.protocol, body.serialNumber);
+    await assertDeviceRefs(tenantId, body.branchId, body.locationId);
+    if (body.serialNumber) body.serialNumber = body.serialNumber.trim();
 
     const apiKeyId = `dkey_${generateOpaqueToken().slice(0, 16)}`;
     const secret = generateOpaqueToken();
@@ -71,6 +99,9 @@ export function registerDeviceRoutes(app: FastifyInstance): void {
     const existing = await prisma.device.findFirst({ where: { id, tenantId } });
     if (!existing) throw AppError.notFound('Device not found');
     const body = deviceSchema.partial().parse(req.body);
+    await assertPushSerial(body.protocol ?? existing.protocol, body.serialNumber ?? existing.serialNumber ?? undefined, id);
+    await assertDeviceRefs(tenantId, body.branchId, body.locationId);
+    if (body.serialNumber) body.serialNumber = body.serialNumber.trim();
     const { apiKeyId: _ignored, ...updates } = body as Record<string, unknown>;
     void _ignored;
     const device = await prisma.device.update({ where: { id }, data: updates as never });

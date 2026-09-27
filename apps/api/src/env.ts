@@ -24,5 +24,6 @@ export const env = {
   ttSmartApiBase: process.env.TTSMART_API_BASE,
   zkConnectorBaseUrl: process.env.ZK_CONNECTOR_BASE_URL,
   zkConnectorDeviceId: process.env.ZK_CONNECTOR_DEVICE_ID,
+  biometricKey: process.env.BIOMETRIC_ENCRYPTION_KEY || undefined,
   zkConnectorSyncIntervalMs: Number(process.env.ZK_CONNECTOR_SYNC_INTERVAL_MS ?? 30000),
 };

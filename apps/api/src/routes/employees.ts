@@ -175,7 +175,8 @@ export function registerEmployeeRoutes(app: FastifyInstance): void {
     if (!employee) throw AppError.notFound('Employee not found');
     const biometrics = await prisma.biometricIdentifier.findMany({
       where: { employeeId: id },
-      select: { id: true, type: true, enrolledAt: true, deviceId: true },
+      select: { id: true, type: true, enrolledAt: true, deviceId: true, fingerIndex: true, format: true, updatedAt: true },
+      orderBy: [{ type: 'asc' }, { fingerIndex: 'asc' }],
     });
     reply.send({ data: biometrics });
   });

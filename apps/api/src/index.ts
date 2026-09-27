@@ -27,6 +27,8 @@ import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerAiRoutes } from './routes/ai.js';
+import { registerDeviceCommandRoutes } from './routes/device-commands.js';
+import iclockRoutes from './routes/iclock.js';
 import { startZkConnectorSync, stopZkConnectorSync } from './modules/connector-sync.js';
 
 const app = Fastify({
@@ -82,6 +84,9 @@ async function main(): Promise<void> {
     });
   });
 
+  // ZKTeco ADMS devices call fixed /iclock/* paths (outside /api/v1).
+  await app.register(iclockRoutes);
+
   app.get('/health', async (_req, reply) => {
     await prisma.$queryRaw`SELECT 1`;
     reply.send({ status: 'ok', service: 'attendiq-api', time: new Date().toISOString() });
@@ -107,6 +112,7 @@ async function main(): Promise<void> {
       registerReportRoutes(api);
       registerAuditRoutes(api);
       registerAiRoutes(api);
+      registerDeviceCommandRoutes(api);
     },
     { prefix: '/api/v1' },
   );

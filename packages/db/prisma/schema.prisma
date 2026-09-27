@@ -470,7 +470,16 @@ model BiometricIdentifier {
   encryptedRef String?
   enrolledAt   DateTime @default(now())
   deviceId     String?
+  /// Finger (0-9) or template slot index on the device.
+  fingerIndex  Int?
+  /// ADMS table the template came from: FINGERTMP, FACE or BIODATA.
+  format       String?
+  /// Non-secret template attributes (size, version, hash) used to rebuild device commands.
+  meta         Json?
+  updatedAt    DateTime @default(now()) @updatedAt
   employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
 }
 
 // -------------------- Devices and raw events --------------------
@@ -518,6 +527,7 @@ model Device {
   connections       DeviceConnection[]
   health            DeviceHealth[]
   syncJobs          DeviceSyncJob[]
+  commands          DeviceCommand[]
   events            DeviceEvent[]
 
   @@unique([tenantId, deviceId])
@@ -1311,4 +1321,29 @@ model AiUsage {
   inputTokens  Int
   outputTokens Int
   occurredAt   DateTime @default(now())
+}
+
+/// Commands queued for ZKTeco ADMS (push) devices, delivered when the device polls /iclock/getrequest.
+model DeviceCommand {
+  id          Int       @id @default(autoincrement())
+  tenantId    String
+  deviceId    String
+  /// USER, TEMPLATE, DELETE_USER, ENROLL or RAW
+  kind        String
+  employeeId  String?
+  biometricId String?
+  fingerIndex Int?
+  /// Only for RAW commands; USER/TEMPLATE commands are built when sent so secrets are not stored here.
+  command     String?
+  /// PENDING, SENT, DONE, FAILED or CANCELLED
+  status      String    @default("PENDING")
+  returnCode  Int?
+  error       String?
+  createdAt   DateTime  @default(now())
+  sentAt      DateTime?
+  completedAt DateTime?
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, status, id])
+  @@index([tenantId, employeeId])
 }

@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
+import { EmployeeBiometrics } from '@/components/EmployeeBiometrics';
 
 type SubTab = 'employees' | 'departments' | 'branches' | 'locations';
 
@@ -146,6 +147,7 @@ export default function EmployeesPage(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [bioEmployee, setBioEmployee] = useState<Employee | null>(null);
 
   const [deptForm, setDeptForm] = useState({ ...EMPTY_DEPARTMENT_FORM });
   const [showDeptForm, setShowDeptForm] = useState(false);
@@ -583,7 +585,14 @@ export default function EmployeesPage(): React.JSX.Element {
                     <td>
                       <StatusBadge value={e.employmentStatus} />
                     </td>
-                    <td>{rowActions(() => openEditEmployee(e), () => void deleteEmployee(e.id))}</td>
+                    <td>
+                      <div className="flex gap-2">
+                        <button className="btn-ghost px-3 py-1 text-xs" onClick={() => setBioEmployee(e)}>
+                          {t('biometrics.button')}
+                        </button>
+                        {rowActions(() => openEditEmployee(e), () => void deleteEmployee(e.id))}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {employees.length === 0 ? emptyRow(9) : null}
@@ -696,6 +705,7 @@ export default function EmployeesPage(): React.JSX.Element {
               </div>
             </div>
           </Modal>
+          <EmployeeBiometrics employee={bioEmployee} onClose={() => setBioEmployee(null)} />
         </div>
       ) : null}
 
