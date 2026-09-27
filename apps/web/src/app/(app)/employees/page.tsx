@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-client';
 import { PageHeader } from '@/components/PageHeader';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
 
@@ -132,6 +133,7 @@ function optionalNumber(value: string): number | undefined {
 
 export default function EmployeesPage(): React.JSX.Element {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<SubTab>('employees');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -285,7 +287,7 @@ export default function EmployeesPage(): React.JSX.Element {
   }
 
   async function deleteEmployee(id: string): Promise<void> {
-    if (!window.confirm(t('employees.confirmDelete'))) return;
+    if (!(await confirm(t('employees.confirmDelete')))) return;
     await api(`/employees/${id}`, { method: 'DELETE' })
       .then(() => loadEmployees())
       .catch((err) => setPageError(errorMessage(err, t('common.error'))));
@@ -342,7 +344,7 @@ export default function EmployeesPage(): React.JSX.Element {
   }
 
   async function deleteDepartment(id: string): Promise<void> {
-    if (!window.confirm(t('departments.confirmDelete'))) return;
+    if (!(await confirm(t('departments.confirmDelete')))) return;
     await api(`/departments/${id}`, { method: 'DELETE' })
       .then(() => {
         loadDepartments();
@@ -401,7 +403,7 @@ export default function EmployeesPage(): React.JSX.Element {
   }
 
   async function deleteBranch(id: string): Promise<void> {
-    if (!window.confirm(t('branches.confirmDelete'))) return;
+    if (!(await confirm(t('branches.confirmDelete')))) return;
     await api(`/branches/${id}`, { method: 'DELETE' })
       .then(() => loadAll())
       .catch((err) => setPageError(errorMessage(err, t('common.error'))));
@@ -461,7 +463,7 @@ export default function EmployeesPage(): React.JSX.Element {
   }
 
   async function deleteLocation(id: string): Promise<void> {
-    if (!window.confirm(t('locations.confirmDelete'))) return;
+    if (!(await confirm(t('locations.confirmDelete')))) return;
     await api(`/locations/${id}`, { method: 'DELETE' })
       .then(() => {
         loadLocations();

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-client';
 import { PageHeader } from '@/components/PageHeader';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 type SubTab = 'devices' | 'doors' | 'groups' | 'ttlock';
 
@@ -70,6 +71,7 @@ interface TtlockResult {
 
 export default function AccessPage(): React.JSX.Element {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<SubTab>('devices');
 
   const [accessDevices, setAccessDevices] = useState<AccessDevice[]>([]);
@@ -195,14 +197,14 @@ export default function AccessPage(): React.JSX.Element {
   }
 
   async function removeDoor(id: string): Promise<void> {
-    if (!window.confirm('Delete this door?')) return;
+    if (!(await confirm('Delete this door?'))) return;
     await api(`/access/doors/${id}`, { method: 'DELETE' })
       .then(loadAll)
       .catch(() => {});
   }
 
   async function removeGroup(id: string): Promise<void> {
-    if (!window.confirm('Delete this group?')) return;
+    if (!(await confirm('Delete this group?'))) return;
     await api(`/access/groups/${id}`, { method: 'DELETE' })
       .then(loadAll)
       .catch(() => {});

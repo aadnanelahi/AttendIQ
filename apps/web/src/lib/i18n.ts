@@ -24,6 +24,7 @@ export const en: Dictionary = {
     delete: 'Delete',
     error: 'Something went wrong',
     noData: 'No data yet',
+    confirmTitle: 'Please confirm',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -288,6 +289,7 @@ export const ar: Dictionary = {
     delete: 'حذف',
     error: 'حدث خطأ ما',
     noData: 'لا توجد بيانات بعد',
+    confirmTitle: 'يرجى التأكيد',
   },
   nav: {
     dashboard: 'لوحة التحكم',

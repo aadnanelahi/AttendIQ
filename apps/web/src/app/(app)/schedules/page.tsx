@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-client';
 import { PageHeader } from '@/components/PageHeader';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { Modal } from '@/components/Modal';
 
 type SubTab = 'shifts' | 'assignments';
@@ -65,6 +66,7 @@ const EMPTY_SHIFT = {
 
 export default function SchedulesPage(): React.JSX.Element {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<SubTab>('shifts');
 
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -138,7 +140,7 @@ export default function SchedulesPage(): React.JSX.Element {
   }
 
   async function removeShift(id: string): Promise<void> {
-    if (!window.confirm('Delete this shift?')) return;
+    if (!(await confirm('Delete this shift?'))) return;
     await api(`/shifts/${id}`, { method: 'DELETE' })
       .then(loadShifts)
       .catch(() => {});
@@ -168,7 +170,7 @@ export default function SchedulesPage(): React.JSX.Element {
   }
 
   async function removeAssignment(id: string): Promise<void> {
-    if (!window.confirm('Delete this assignment?')) return;
+    if (!(await confirm('Delete this assignment?'))) return;
     await api(`/employee-schedules/${id}`, { method: 'DELETE' })
       .then(loadAssignments)
       .catch(() => {});

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, apiEnvelope, ApiError } from '@/lib/api';
 import { useI18n } from '@/lib/i18n-client';
 import { PageHeader } from '@/components/PageHeader';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Modal } from '@/components/Modal';
 
@@ -47,6 +48,7 @@ const EMPTY_FORM = {
 
 export default function DevicesPage(): React.JSX.Element {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const [devices, setDevices] = useState<Device[]>([]);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [showForm, setShowForm] = useState(false);
@@ -139,7 +141,7 @@ export default function DevicesPage(): React.JSX.Element {
   }
 
   async function removeDevice(id: string): Promise<void> {
-    if (!window.confirm('Delete this device?')) return;
+    if (!(await confirm('Delete this device?'))) return;
     await api(`/devices/${id}`, { method: 'DELETE' })
       .then(() => load())
       .catch(() => {});
