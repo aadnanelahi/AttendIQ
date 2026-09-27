@@ -1,6 +1,13 @@
 // Default to same-origin '/api/v1'; next.config.mjs proxies it to the API server
 // (API_ORIGIN). Set NEXT_PUBLIC_API_URL only to call an API directly.
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+function resolveApiUrl(): string {
+  const configured = (process.env.NEXT_PUBLIC_API_URL ?? '').trim().replace(/\/+$/, '');
+  if (!configured) return '/api/v1';
+  // Accept a bare origin (e.g. https://example.com) as well as a full .../api/v1 URL.
+  return configured.endsWith('/api/v1') ? configured : `${configured}/api/v1`;
+}
+
+export const API_URL = resolveApiUrl();
 
 const TOKEN_COOKIE = 'attendiq_token';
 const REFRESH_COOKIE = 'attendiq_refresh';
